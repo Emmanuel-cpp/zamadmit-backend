@@ -21,6 +21,10 @@ class Institution extends Model
         'application_deadline',
         'is_accepting_applications',
         'image_url',
+        'student_number_prefix',
+        'student_number_length',
+        'next_student_seq',
+        'application_fee'
     ];
 
     protected function casts(): array

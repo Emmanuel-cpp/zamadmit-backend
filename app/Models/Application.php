@@ -17,6 +17,7 @@ class Application extends Model
         'internal_note',
         'submitted_at',
         'decision_at',
+        'student_number'
     ];
 
     protected function casts(): array
@@ -49,5 +50,10 @@ class Application extends Model
     public function isDecided(): bool
     {
         return in_array($this->status, ['accepted', 'rejected', 'waitlisted']);
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(Payment::class);
     }
 }

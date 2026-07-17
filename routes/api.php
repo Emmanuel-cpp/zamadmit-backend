@@ -17,10 +17,8 @@ use App\Http\Controllers\Api\Admin\ApplicationController as AdminApplicationCont
 */
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login',    [AuthController::class, 'login']);
-
 Route::get('/institutions',        [InstitutionController::class, 'index']);
 Route::get('/institutions/{slug}', [InstitutionController::class, 'show']);
-
 Route::get('/programmes',          [ProgrammeController::class, 'index']);
 Route::get('/programmes/{slug}',   [ProgrammeController::class, 'show']);
 
@@ -58,16 +56,23 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/documents',        [DocumentController::class, 'store']);
         Route::delete('/documents/{id}', [DocumentController::class, 'destroy']);
 
-        // Applications
+        // Applications (student)
         Route::get('/applications',      [ApplicationController::class, 'index']);
         Route::post('/applications',     [ApplicationController::class, 'store']);
         Route::get('/applications/{id}', [ApplicationController::class, 'show']);
-        Route::get('/recommendations', [\App\Http\Controllers\Api\RecommendationController::class, 'index']);// AI-powered recommendations
-        
+
+        // AI-powered recommendations
+        Route::get('/recommendations', [\App\Http\Controllers\Api\RecommendationController::class, 'index']);
+
         // Notifications
-        Route::get('/notifications',                  [\App\Http\Controllers\Api\NotificationController::class, 'index']);
-        Route::post('/notifications/{id}/read',       [\App\Http\Controllers\Api\NotificationController::class, 'markAsRead']);
-        Route::post('/notifications/read-all',        [\App\Http\Controllers\Api\NotificationController::class, 'markAllAsRead']);
+        Route::get('/notifications',            [\App\Http\Controllers\Api\NotificationController::class, 'index']);
+        Route::post('/notifications/{id}/read', [\App\Http\Controllers\Api\NotificationController::class, 'markAsRead']);
+        Route::post('/notifications/read-all',  [\App\Http\Controllers\Api\NotificationController::class, 'markAllAsRead']);
+
+        // Payments (simulated mobile money)
+        Route::get('/payments',               [\App\Http\Controllers\Api\PaymentController::class, 'index']);
+        Route::post('/payments',              [\App\Http\Controllers\Api\PaymentController::class, 'initiate']);
+        Route::post('/payments/{id}/confirm', [\App\Http\Controllers\Api\PaymentController::class, 'confirm']);
 
         /*
         |------------------------------------------------------------------
@@ -75,20 +80,26 @@ Route::middleware('auth:sanctum')->group(function () {
         |------------------------------------------------------------------
         */
         Route::middleware('role:institution_admin')->prefix('admin')->group(function () {
-            Route::get('/applications',      [AdminApplicationController::class, 'index']);
-            Route::get('/applications/{id}', [AdminApplicationController::class, 'show']);
-            Route::put('/applications/{id}', [AdminApplicationController::class, 'update']);
+
+            // Applications — NOTE: /export must stay ABOVE /{id},
+            // otherwise Laravel matches "export" as an {id}.
+            Route::get('/applications',        [AdminApplicationController::class, 'index']);
+            Route::get('/applications/export', [AdminApplicationController::class, 'export']);
+            Route::get('/applications/{id}',   [AdminApplicationController::class, 'show']);
+            Route::put('/applications/{id}',   [AdminApplicationController::class, 'update']);
+
+            // Analytics
             Route::get('/analytics', [\App\Http\Controllers\Api\Admin\AnalyticsController::class, 'index']);
 
             // Programme management
-            Route::get('/programmes',         [\App\Http\Controllers\Api\Admin\ProgrammeController::class, 'index']);
-            Route::get('/programmes/{id}',    [\App\Http\Controllers\Api\Admin\ProgrammeController::class, 'show']);
-            Route::post('/programmes',        [\App\Http\Controllers\Api\Admin\ProgrammeController::class, 'store']);
-            Route::put('/programmes/{id}',    [\App\Http\Controllers\Api\Admin\ProgrammeController::class, 'update']);
+            Route::get('/programmes',      [\App\Http\Controllers\Api\Admin\ProgrammeController::class, 'index']);
+            Route::get('/programmes/{id}', [\App\Http\Controllers\Api\Admin\ProgrammeController::class, 'show']);
+            Route::post('/programmes',     [\App\Http\Controllers\Api\Admin\ProgrammeController::class, 'store']);
+            Route::put('/programmes/{id}', [\App\Http\Controllers\Api\Admin\ProgrammeController::class, 'update']);
 
             // Institution settings
-            Route::get('/institution',  [\App\Http\Controllers\Api\Admin\InstitutionController::class, 'show']);
-            Route::put('/institution',  [\App\Http\Controllers\Api\Admin\InstitutionController::class, 'update']);
+            Route::get('/institution', [\App\Http\Controllers\Api\Admin\InstitutionController::class, 'show']);
+            Route::put('/institution', [\App\Http\Controllers\Api\Admin\InstitutionController::class, 'update']);
         });
     });
 });
