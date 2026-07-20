@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Institution;
 use Illuminate\Http\Request;
+use App\Services\AuditLogger;
 
 /**
  * Admin-only access to the admin's own institution profile.
@@ -45,7 +46,12 @@ class InstitutionController extends Controller
             'application_fee' => 'sometimes|numeric|min:20|max:10000',
         ]);
 
+        $oldSnapshot = collect($institution->only(array_keys($data)))->toArray();
+
         $institution->update($data);
+
+        AuditLogger::log('institution.updated', $institution,
+            old: $oldSnapshot, new: $data);
 
         return response()->json($institution->fresh());
     }

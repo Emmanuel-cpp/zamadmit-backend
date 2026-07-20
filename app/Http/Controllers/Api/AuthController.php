@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
+use App\Services\AuditLogger;
 
 class AuthController extends Controller
 {
@@ -54,6 +55,8 @@ class AuthController extends Controller
         $user = User::where('email', $data['email'])->first();
 
         if (!$user || !Hash::check($data['password'], $user->password)) {
+            AuditLogger::log('auth.login_failed', null,
+                new: ['email' => $data['email']]);
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
             ]);
@@ -63,6 +66,8 @@ class AuthController extends Controller
         $user->tokens()->delete();
 
         $token = $user->createToken('auth_token')->plainTextToken;
+        AuditLogger::log('auth.login', $user, userId: $user->id,
+            institutionId: $user->institution_id);
 
         return response()->json([
             'user'  => $this->formatUser($user),
@@ -108,6 +113,7 @@ class AuthController extends Controller
                 'profile_complete'     => $user->profile_complete,
                 'must_change_password' => $user->must_change_password,
                 'institution_id'       => $user->institution_id,
+                'admin_role'           => $user->admin_role,
             ];
         }
 }

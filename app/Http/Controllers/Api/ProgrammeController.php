@@ -25,6 +25,7 @@ class ProgrammeController extends Controller
             ->with('requirements')
             ->orderBy('name')
             ->get();
+        $programmes->each(fn ($p) => $p->is_full = $p->isFull());
 
         return response()->json($programmes);
     }
@@ -41,6 +42,7 @@ class ProgrammeController extends Controller
             ->where('slug', $slug)
             ->firstOrFail();
 
+        $programme->is_full = $programme->isFull();    
         return response()->json($programme);
     }
 }

@@ -77,6 +77,15 @@ class ApplicationController extends Controller
             ]);
         }
 
+        // Capacity gate (soft) — refuse new drafts for full programmes.
+        // The authoritative check happens transactionally at payment time.
+        $programme = \App\Models\Programme::findOrFail($data['programme_id']);
+        if ($programme->isFull()) {
+            return response()->json([
+                'message' => 'This programme has reached its capacity and is no longer accepting applications.',
+            ], 422);
+        }
+
         $application->load('programme.institution');
 
         $fee         = (float) ($application->programme->institution->application_fee ?? 150.00);

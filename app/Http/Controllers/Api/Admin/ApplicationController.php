@@ -10,6 +10,7 @@ use App\Services\MatchScoreService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Facades\Excel;
+use App\Services\AuditLogger; 
 
 /**
  * Admin-side application review: list, inspect, decide, export.
@@ -64,6 +65,12 @@ class ApplicationController extends Controller
      * the institution's next student number. On any status change,
      * notifies the applicant.
      */
+/**
+     * PUT /api/admin/applications/{id}
+     * Update decision and internal note. Enforces the decision state
+     * machine, assigns a student number on first acceptance, notifies
+     * the applicant, and writes an audit record for every transition.
+     */
     public function update(Request $request, int $id)
     {
         $institutionId = $request->user()->institution_id;
@@ -71,7 +78,7 @@ class ApplicationController extends Controller
         $application = Application::whereHas('programme', function ($q) use ($institutionId) {
                 $q->where('institution_id', $institutionId);
             })
-            ->with(['programme.institution', 'user'])
+            ->with(['programme.institution', 'programme.requirements', 'user'])
             ->findOrFail($id);
 
         $data = $request->validate([
@@ -81,24 +88,59 @@ class ApplicationController extends Controller
 
         $previousStatus = $application->status;
 
+        // ── Decision state machine ─────────────────────────────────────
+        // Acceptance is terminal: it issues a student number and a
+        // communicated offer. Rejections are reversible (appeals).
+        // Waitlist promotion is the standard path when seats open.
+        $allowedTransitions = [
+            'submitted'    => ['under_review', 'accepted', 'rejected', 'waitlisted'],
+            'under_review' => ['accepted', 'rejected', 'waitlisted'],
+            'waitlisted'   => ['accepted', 'rejected'],
+            'rejected'     => ['waitlisted', 'accepted'],
+            'accepted'     => [], // terminal
+        ];
+
+        if (
+            isset($data['status'])
+            && $data['status'] !== $previousStatus
+            && !in_array($data['status'], $allowedTransitions[$previousStatus] ?? [], true)
+        ) {
+            return response()->json([
+                'message' => $previousStatus === 'accepted'
+                    ? 'This application has been accepted and the offer communicated. Acceptances cannot be reversed here.'
+                    : "Cannot change status from '{$previousStatus}' to '{$data['status']}'.",
+            ], 422);
+        }
+
         if (isset($data['status']) && in_array($data['status'], ['accepted', 'rejected', 'waitlisted'])) {
             $data['decision_at'] = now();
         }
 
-        // Assign a student number on FIRST acceptance only. Generated in a
-        // transaction with a row lock on the institution counter, so two
-        // admins accepting simultaneously can never produce a collision.
-        if (
-            isset($data['status'])
-            && $data['status'] === 'accepted'
-            && $application->student_number === null
-        ) {
-            $data['student_number'] = $this->generateStudentNumber($institutionId);
+        if (isset($data['status']) && $data['status'] === 'accepted') {
+            // Acceptance (including re-acceptance after appeal) must
+            // respect capacity like any other seat claim.
+            if ($application->programme->isFull()) {
+                return response()->json([
+                    'message' => 'This programme is at capacity. Free a seat or raise the capacity before accepting.',
+                ], 422);
+            }
+
+            if ($application->student_number === null) {
+                $data['student_number'] = $this->generateStudentNumber($institutionId);
+            }
         }
 
         $application->update($data);
 
         if (isset($data['status']) && $data['status'] !== $previousStatus) {
+            AuditLogger::log('application.decided', $application,
+                old: ['status' => $previousStatus],
+                new: [
+                    'status'         => $data['status'],
+                    'student_number' => $data['student_number'] ?? null,
+                ],
+            );
+
             $this->notifyApplicant(
                 $application->fresh(['programme.institution', 'user']),
                 $data['status'],

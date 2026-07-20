@@ -19,12 +19,14 @@ class Programme extends Model
         'study_mode',
         'intake',
         'description',
+        'capacity'
     ];
 
     protected function casts(): array
     {
         return [
             'duration_years' => 'integer',
+            'capacity' => 'integer',
         ];
     }
 
@@ -43,5 +45,30 @@ class Programme extends Model
     public function applications()
     {
         return $this->hasMany(Application::class);
+    }
+
+    /**
+     * Applications that occupy or claim a seat.
+     * Rule: submitted + under_review + accepted count against capacity.
+     * Drafts (unpaid) and rejected/waitlisted applications do not.
+     */
+    public function activeApplicationsCount(): int
+    {
+        return $this->applications()
+            ->whereIn('status', ['submitted', 'under_review', 'accepted'])
+            ->count();
+    }
+
+    /**
+     * True when the programme has a capacity and it is reached.
+     * NULL capacity = unlimited = never full.
+     */
+    public function isFull(): bool
+    {
+        if ($this->capacity === null) {
+            return false;
+        }
+
+        return $this->activeApplicationsCount() >= $this->capacity;
     }
 }

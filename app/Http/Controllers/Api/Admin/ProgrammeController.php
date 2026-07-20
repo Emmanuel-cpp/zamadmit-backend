@@ -7,6 +7,7 @@ use App\Models\Programme;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Services\AuditLogger;
 
 /**
  * Admin-only CRUD for programmes within the authenticated admin's institution.
@@ -62,6 +63,7 @@ class ProgrammeController extends Controller
                 'study_mode'     => $data['study_mode'],
                 'intake'         => $data['intake'],
                 'description'    => $data['description'] ?? null,
+                'capacity' => $data['capacity'] ?? null,
             ]);
 
             foreach ($data['requirements'] ?? [] as $req) {
@@ -71,13 +73,16 @@ class ProgrammeController extends Controller
                 ]);
             }
 
-            return $programme;
-        });
+                    return $programme;
+                });
 
-        return response()->json(
-            $programme->fresh()->load('requirements'),
-            201,
-        );
+                AuditLogger::log('programme.created', $programme,
+                    new: ['name' => $programme->name, 'school' => $programme->school]);
+
+                return response()->json(
+                    $programme->fresh()->load('requirements'),
+                    201,
+                );
     }
 
     /**
@@ -86,12 +91,10 @@ class ProgrammeController extends Controller
     public function update(Request $request, int $id)
     {
         $institutionId = $request->user()->institution_id;
-
         $programme = Programme::where('institution_id', $institutionId)
             ->findOrFail($id);
-
         $data = $this->validateRequest($request, $institutionId, $programme->id);
-
+        $oldSnapshot = $programme->only(['name', 'school', 'capacity', 'intake']);
         DB::transaction(function () use ($programme, $data) {
             $programme->update([
                 'name'           => $data['name'],
@@ -101,6 +104,7 @@ class ProgrammeController extends Controller
                 'study_mode'     => $data['study_mode'],
                 'intake'         => $data['intake'],
                 'description'    => $data['description'] ?? null,
+                'capacity' => $data['capacity'] ?? null,
             ]);
 
             $programme->requirements()->delete();
@@ -110,7 +114,11 @@ class ProgrammeController extends Controller
                     'min_grade' => $req['min_grade'],
                 ]);
             }
-        });
+});
+
+        AuditLogger::log('programme.updated', $programme,
+            old: $oldSnapshot,
+            new: $programme->fresh()->only(['name', 'school', 'capacity', 'intake']));
 
         return response()->json($programme->fresh()->load('requirements'));
     }
@@ -132,6 +140,7 @@ class ProgrammeController extends Controller
             'requirements'             => 'nullable|array|max:12',
             'requirements.*.subject'   => 'required|string|max:100',
             'requirements.*.min_grade' => 'required|integer|min:1|max:9',
+            'capacity' => 'nullable|integer|min:1|max:100000',
         ]);
     }
 

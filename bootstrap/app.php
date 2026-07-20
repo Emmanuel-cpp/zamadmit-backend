@@ -17,6 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
             $middleware->alias([
                 'role' => \App\Http\Middleware\RoleMiddleware::class,
                 'password.changed' => \App\Http\Middleware\EnsurePasswordChanged::class,
+                'admin.can' => \App\Http\Middleware\AdminCapability::class,
             ]);
 
             // API routes are stateless and use Sanctum token authentication.

@@ -8,6 +8,7 @@ use App\Models\Payment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Services\AuditLogger;
 
 /**
  * Mobile money application-fee payments.
@@ -76,22 +77,28 @@ class PaymentController extends Controller
         return response()->json($payment, 201);
     }
 
-    /**
+/**
      * POST /api/payments/{id}/confirm
-     * The simulated provider callback. On success, completes the payment
-     * AND submits the application atomically.
+     * The simulated provider callback. Capacity is checked inside the
+     * completing transaction with a row lock, so a payment can never
+     * succeed for a seat that no longer exists. Every outcome is audited.
      */
     public function confirm(Request $request, int $id)
     {
         $payment = Payment::where('id', $id)
             ->where('user_id', $request->user()->id)
             ->where('status', 'pending')
-            ->with('application')
+            ->with('application.programme')
             ->firstOrFail();
 
         // Sandbox failure path: phone ending 9999 always declines.
         if (str_ends_with($payment->phone, '9999')) {
             $payment->update(['status' => 'failed']);
+
+            AuditLogger::log('payment.failed', $payment,
+                new: ['reference' => $payment->reference, 'reason' => 'declined'],
+                institutionId: $payment->application->programme->institution_id ?? null,
+            );
 
             return response()->json([
                 'payment' => $payment->fresh(),
@@ -99,18 +106,50 @@ class PaymentController extends Controller
             ], 402);
         }
 
-        DB::transaction(function () use ($payment) {
+        $result = DB::transaction(function () use ($payment) {
+            $programme = \App\Models\Programme::where('id', $payment->application->programme_id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($programme->isFull()) {
+                $payment->update(['status' => 'failed']);
+                return 'full';
+            }
+
             $payment->update([
                 'status'       => 'completed',
                 'completed_at' => now(),
             ]);
 
-            // Payment completes → the application is officially submitted.
             $payment->application->update([
                 'status'       => 'submitted',
                 'submitted_at' => now(),
             ]);
+
+            AuditLogger::log('payment.completed', $payment,
+                new: [
+                    'amount'             => (string) $payment->amount,
+                    'platform_fee'       => (string) $payment->platform_fee,
+                    'institution_amount' => (string) $payment->institution_amount,
+                    'reference'          => $payment->reference,
+                ],
+                institutionId: $programme->institution_id,
+            );
+
+            return 'ok';
         });
+
+        if ($result === 'full') {
+            AuditLogger::log('payment.failed', $payment,
+                new: ['reference' => $payment->reference, 'reason' => 'programme_full'],
+                institutionId: $payment->application->programme->institution_id ?? null,
+            );
+
+            return response()->json([
+                'payment' => $payment->fresh(),
+                'message' => 'This programme filled up just before your payment completed. You have NOT been charged. Your application remains saved as a draft.',
+            ], 409);
+        }
 
         return response()->json([
             'payment' => $payment->fresh(),

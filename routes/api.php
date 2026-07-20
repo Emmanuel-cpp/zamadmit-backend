@@ -21,6 +21,8 @@ Route::get('/institutions',        [InstitutionController::class, 'index']);
 Route::get('/institutions/{slug}', [InstitutionController::class, 'show']);
 Route::get('/programmes',          [ProgrammeController::class, 'index']);
 Route::get('/programmes/{slug}',   [ProgrammeController::class, 'show']);
+Route::get('/invites/{token}',         [\App\Http\Controllers\Api\InviteController::class, 'show']);
+Route::post('/invites/{token}/accept', [\App\Http\Controllers\Api\InviteController::class, 'accept']);
 
 /*
 |--------------------------------------------------------------------------
@@ -79,27 +81,46 @@ Route::middleware('auth:sanctum')->group(function () {
         | Institution admin routes
         |------------------------------------------------------------------
         */
-        Route::middleware('role:institution_admin')->prefix('admin')->group(function () {
+Route::middleware('role:institution_admin')->prefix('admin')->group(function () {
 
-            // Applications — NOTE: /export must stay ABOVE /{id},
-            // otherwise Laravel matches "export" as an {id}.
-            Route::get('/applications',        [AdminApplicationController::class, 'index']);
-            Route::get('/applications/export', [AdminApplicationController::class, 'export']);
-            Route::get('/applications/{id}',   [AdminApplicationController::class, 'show']);
-            Route::put('/applications/{id}',   [AdminApplicationController::class, 'update']);
+            // ── Viewing (all admin tiers) ─────────────────────────────
+            Route::middleware('admin.can:view')->group(function () {
+                Route::get('/applications',        [AdminApplicationController::class, 'index']);
+                Route::get('/applications/export', [AdminApplicationController::class, 'export']);
+                Route::get('/applications/{id}',   [AdminApplicationController::class, 'show']);
+                Route::get('/analytics',           [\App\Http\Controllers\Api\Admin\AnalyticsController::class, 'index']);
+                Route::get('/programmes',          [\App\Http\Controllers\Api\Admin\ProgrammeController::class, 'index']);
+                Route::get('/programmes/{id}',     [\App\Http\Controllers\Api\Admin\ProgrammeController::class, 'show']);
+                
+            });
 
-            // Analytics
-            Route::get('/analytics', [\App\Http\Controllers\Api\Admin\AnalyticsController::class, 'index']);
+            // ── Deciding (owner + admissions_officer) ─────────────────
+            Route::middleware('admin.can:decide')->group(function () {
+                Route::put('/applications/{id}', [AdminApplicationController::class, 'update']);
+            });
 
-            // Programme management
-            Route::get('/programmes',      [\App\Http\Controllers\Api\Admin\ProgrammeController::class, 'index']);
-            Route::get('/programmes/{id}', [\App\Http\Controllers\Api\Admin\ProgrammeController::class, 'show']);
-            Route::post('/programmes',     [\App\Http\Controllers\Api\Admin\ProgrammeController::class, 'store']);
-            Route::put('/programmes/{id}', [\App\Http\Controllers\Api\Admin\ProgrammeController::class, 'update']);
+            // ── Programme management (owner only) ─────────────────────
+            Route::middleware('admin.can:manage_programmes')->group(function () {
+                Route::post('/programmes',     [\App\Http\Controllers\Api\Admin\ProgrammeController::class, 'store']);
+                Route::put('/programmes/{id}', [\App\Http\Controllers\Api\Admin\ProgrammeController::class, 'update']);
+                Route::get('/audit-logs', [\App\Http\Controllers\Api\Admin\AuditLogController::class, 'index']);
+            });
 
-            // Institution settings
-            Route::get('/institution', [\App\Http\Controllers\Api\Admin\InstitutionController::class, 'show']);
-            Route::put('/institution', [\App\Http\Controllers\Api\Admin\InstitutionController::class, 'update']);
+            // ── Institution settings (owner only) ─────────────────────
+            Route::middleware('admin.can:manage_settings')->group(function () {
+                Route::put('/institution', [\App\Http\Controllers\Api\Admin\InstitutionController::class, 'update']);
+                Route::get('/institution',         [\App\Http\Controllers\Api\Admin\InstitutionController::class, 'show']);
+            });
+
+            // ── Team management (owner only) ──────────────────────────
+            Route::middleware('admin.can:manage_admins')->group(function () {
+                Route::get('/team',                 [\App\Http\Controllers\Api\Admin\TeamController::class, 'index']);
+                Route::get('/audit-logs', [\App\Http\Controllers\Api\Admin\AuditLogController::class, 'index']);
+                Route::post('/team/invites',        [\App\Http\Controllers\Api\Admin\TeamController::class, 'invite']);
+                Route::delete('/team/invites/{id}', [\App\Http\Controllers\Api\Admin\TeamController::class, 'revokeInvite']);
+                Route::put('/team/{userId}',        [\App\Http\Controllers\Api\Admin\TeamController::class, 'updateRole']);
+                Route::delete('/team/{userId}',     [\App\Http\Controllers\Api\Admin\TeamController::class, 'remove']);
+            });
         });
     });
 });
