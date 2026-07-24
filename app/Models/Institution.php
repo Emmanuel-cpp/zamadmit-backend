@@ -24,7 +24,11 @@ class Institution extends Model
         'student_number_prefix',
         'student_number_length',
         'next_student_seq',
-        'application_fee'
+        'application_fee',
+        'is_suspended', 
+        'suspended_at', 
+        'suspension_reason', 
+        'onboarded_by'
     ];
 
     protected function casts(): array
@@ -33,6 +37,8 @@ class Institution extends Model
             'is_accepting_applications' => 'boolean',
             'application_deadline'      => 'date',
             'established'               => 'integer',
+            'is_suspended'              => 'boolean', 
+            'suspended_at'              => 'datetime'
         ];
     }
 
@@ -46,5 +52,10 @@ class Institution extends Model
     public function admins()
     {
         return $this->hasMany(User::class)->where('role', 'institution_admin');
+    }
+
+    public function users()
+    {
+        return $this->hasMany(User::class);
     }
 }

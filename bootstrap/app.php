@@ -18,6 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 'role' => \App\Http\Middleware\RoleMiddleware::class,
                 'password.changed' => \App\Http\Middleware\EnsurePasswordChanged::class,
                 'admin.can' => \App\Http\Middleware\AdminCapability::class,
+                'platform' => \App\Http\Middleware\PlatformAdmin::class,
             ]);
 
             // API routes are stateless and use Sanctum token authentication.
@@ -28,5 +29,7 @@ return Application::configure(basePath: dirname(__DIR__))
             ]);
         })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->shouldRenderJsonWhen(
+            fn ($request) => $request->is('api/*') || $request->expectsJson()
+        );
     })->create();

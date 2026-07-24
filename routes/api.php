@@ -19,6 +19,7 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login',    [AuthController::class, 'login']);
 Route::get('/institutions',        [InstitutionController::class, 'index']);
 Route::get('/institutions/{slug}', [InstitutionController::class, 'show']);
+Route::get('/stats', [\App\Http\Controllers\Api\StatsController::class, 'index']);
 Route::get('/programmes',          [ProgrammeController::class, 'index']);
 Route::get('/programmes/{slug}',   [ProgrammeController::class, 'show']);
 Route::get('/invites/{token}',         [\App\Http\Controllers\Api\InviteController::class, 'show']);
@@ -81,7 +82,7 @@ Route::middleware('auth:sanctum')->group(function () {
         | Institution admin routes
         |------------------------------------------------------------------
         */
-Route::middleware('role:institution_admin')->prefix('admin')->group(function () {
+        Route::middleware('role:institution_admin')->prefix('admin')->group(function () {
 
             // ── Viewing (all admin tiers) ─────────────────────────────
             Route::middleware('admin.can:view')->group(function () {
@@ -91,7 +92,6 @@ Route::middleware('role:institution_admin')->prefix('admin')->group(function () 
                 Route::get('/analytics',           [\App\Http\Controllers\Api\Admin\AnalyticsController::class, 'index']);
                 Route::get('/programmes',          [\App\Http\Controllers\Api\Admin\ProgrammeController::class, 'index']);
                 Route::get('/programmes/{id}',     [\App\Http\Controllers\Api\Admin\ProgrammeController::class, 'show']);
-                
             });
 
             // ── Deciding (owner + admissions_officer) ─────────────────
@@ -103,24 +103,53 @@ Route::middleware('role:institution_admin')->prefix('admin')->group(function () 
             Route::middleware('admin.can:manage_programmes')->group(function () {
                 Route::post('/programmes',     [\App\Http\Controllers\Api\Admin\ProgrammeController::class, 'store']);
                 Route::put('/programmes/{id}', [\App\Http\Controllers\Api\Admin\ProgrammeController::class, 'update']);
-                Route::get('/audit-logs', [\App\Http\Controllers\Api\Admin\AuditLogController::class, 'index']);
             });
 
             // ── Institution settings (owner only) ─────────────────────
             Route::middleware('admin.can:manage_settings')->group(function () {
+                Route::get('/institution', [\App\Http\Controllers\Api\Admin\InstitutionController::class, 'show']);
                 Route::put('/institution', [\App\Http\Controllers\Api\Admin\InstitutionController::class, 'update']);
-                Route::get('/institution',         [\App\Http\Controllers\Api\Admin\InstitutionController::class, 'show']);
             });
 
-            // ── Team management (owner only) ──────────────────────────
+            // ── Team management + activity log (owner only) ───────────
             Route::middleware('admin.can:manage_admins')->group(function () {
                 Route::get('/team',                 [\App\Http\Controllers\Api\Admin\TeamController::class, 'index']);
-                Route::get('/audit-logs', [\App\Http\Controllers\Api\Admin\AuditLogController::class, 'index']);
+                Route::get('/audit-logs',           [\App\Http\Controllers\Api\Admin\AuditLogController::class, 'index']);
                 Route::post('/team/invites',        [\App\Http\Controllers\Api\Admin\TeamController::class, 'invite']);
                 Route::delete('/team/invites/{id}', [\App\Http\Controllers\Api\Admin\TeamController::class, 'revokeInvite']);
                 Route::put('/team/{userId}',        [\App\Http\Controllers\Api\Admin\TeamController::class, 'updateRole']);
                 Route::delete('/team/{userId}',     [\App\Http\Controllers\Api\Admin\TeamController::class, 'remove']);
             });
+        });
+
+        /*
+        |------------------------------------------------------------------
+        | ZamAdmit platform administration
+        |
+        | Sits above institution admins: provisions and suspends
+        | institutions, and reads platform-wide aggregates. Deliberately
+        | holds NO admissions authority — no route here exposes applicant
+        | personal data or decision powers.
+        |------------------------------------------------------------------
+        */
+        Route::middleware('platform')->prefix('platform')->group(function () {
+
+            // Platform-wide statistics and the global audit feed
+            Route::get('/stats',      [\App\Http\Controllers\Api\Platform\PlatformStatsController::class, 'index']);
+            Route::get('/audit-logs', [\App\Http\Controllers\Api\Platform\PlatformStatsController::class, 'auditLogs']);
+
+            // Institution provisioning
+            Route::get('/institutions',      [\App\Http\Controllers\Api\Platform\PlatformInstitutionController::class, 'index']);
+            Route::post('/institutions',     [\App\Http\Controllers\Api\Platform\PlatformInstitutionController::class, 'store']);
+            Route::get('/institutions/{id}', [\App\Http\Controllers\Api\Platform\PlatformInstitutionController::class, 'show']);
+
+            // Institution suspension (reversible, never destructive)
+            Route::put('/institutions/{id}/suspend',    [\App\Http\Controllers\Api\Platform\PlatformInstitutionController::class, 'suspend']);
+            Route::put('/institutions/{id}/reactivate', [\App\Http\Controllers\Api\Platform\PlatformInstitutionController::class, 'reactivate']);
+
+            // Individual admin account suspension
+            Route::put('/users/{id}/suspend',    [\App\Http\Controllers\Api\Platform\PlatformInstitutionController::class, 'suspendUser']);
+            Route::put('/users/{id}/reactivate', [\App\Http\Controllers\Api\Platform\PlatformInstitutionController::class, 'reactivateUser']);
         });
     });
 });

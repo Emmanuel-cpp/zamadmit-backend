@@ -65,6 +65,25 @@ class AuthController extends Controller
         // Delete old tokens so only one active session at a time
         $user->tokens()->delete();
 
+        // Suspended accounts cannot sign in.
+        if ($user->is_suspended) {
+            AuditLogger::log('auth.login_blocked', $user,
+                new: ['reason' => 'account_suspended'], userId: $user->id);
+
+            return response()->json([
+                'message' => 'This account has been suspended. Contact ZamAdmit support.',
+            ], 403);
+        }
+
+        // Institution admins cannot sign in while their institution is suspended.
+        if ($user->role === 'institution_admin' && $user->institution?->is_suspended) {
+            AuditLogger::log('auth.login_blocked', $user,
+                new: ['reason' => 'institution_suspended'], userId: $user->id);
+
+            return response()->json([
+                'message' => 'Your institution\'s account is currently suspended. Contact ZamAdmit support.',
+            ], 403);
+        }
         $token = $user->createToken('auth_token')->plainTextToken;
         AuditLogger::log('auth.login', $user, userId: $user->id,
             institutionId: $user->institution_id);

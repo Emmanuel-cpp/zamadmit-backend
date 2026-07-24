@@ -9,20 +9,19 @@ use Illuminate\Http\Request;
 /**
  * Public read-only controller for browsing institutions.
  *
- * Anyone (including unauthenticated visitors) can list all institutions
- * and view any single institution's details. This powers the public
- * /institutions browse page and the institution detail page.
+ * Suspended institutions are excluded entirely: they disappear from the
+ * public site without their data being destroyed, so suspension is fully
+ * reversible by a platform administrator.
  */
 class InstitutionController extends Controller
 {
     /**
      * GET /api/institutions
-     *
-     * List all institutions for public browsing.
      */
     public function index(Request $request)
     {
-        $institutions = Institution::withCount('programmes')
+        $institutions = Institution::where('is_suspended', false)
+            ->withCount('programmes')
             ->orderBy('name')
             ->get();
 
@@ -31,8 +30,6 @@ class InstitutionController extends Controller
 
     /**
      * GET /api/institutions/{slug}
-     *
-     * Single institution detail, including its nested programmes.
      */
     public function show(string $slug)
     {
@@ -40,6 +37,7 @@ class InstitutionController extends Controller
                 $q->orderBy('school')->orderBy('name');
             }])
             ->where('slug', $slug)
+            ->where('is_suspended', false)
             ->firstOrFail();
 
         return response()->json($institution);

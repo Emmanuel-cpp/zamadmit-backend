@@ -27,6 +27,8 @@ class User extends Authenticatable
         'must_change_password',
         'password_changed_at',
         'admin_role',
+        'is_suspended', 
+        'suspended_at'
     ];
 
     protected $hidden = [
@@ -45,6 +47,8 @@ class User extends Authenticatable
             'password_changed_at'   => 'datetime',
             'date_of_birth'         => 'date',
             'interests'             => 'array',
+            'is_suspended'          => 'boolean', 
+            'suspended_at'          => 'datetime'
         ];
     }
 

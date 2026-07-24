@@ -37,11 +37,40 @@ class PaymentController extends Controller
      */
     public function initiate(Request $request)
     {
-        $data = $request->validate([
+$data = $request->validate([
             'application_id' => 'required|integer|exists:applications,id',
             'provider'       => 'required|in:mtn,airtel,zamtel',
-            'phone'          => 'required|string|min:10|max:15|regex:/^[0-9+]+$/',
+            'phone'          => 'required|string',
         ]);
+
+        // Normalize: +260977123456 → 0977123456
+        $phone = preg_replace('/\s+/', '', $data['phone']);
+        if (str_starts_with($phone, '+260')) {
+            $phone = '0' . substr($phone, 4);
+        }
+
+        // Zambian mobile format: 10 digits, provider-correct prefix.
+        //   Airtel: 097, 077, 057 · MTN: 096, 076, 056 · Zamtel: 095, 075, 055
+        $prefixes = [
+            'airtel' => ['097', '077', '057'],
+            'mtn'    => ['096', '076', '056'],
+            'zamtel' => ['095', '075', '055'],
+        ];
+
+        if (!preg_match('/^0\d{9}$/', $phone)) {
+            return response()->json([
+                'message' => 'Enter a valid Zambian mobile number (10 digits, e.g. 0977123456).',
+            ], 422);
+        }
+
+        if (!in_array(substr($phone, 0, 3), $prefixes[$data['provider']], true)) {
+            $label = ['airtel' => 'Airtel', 'mtn' => 'MTN', 'zamtel' => 'Zamtel'][$data['provider']];
+            return response()->json([
+                'message' => "This number does not look like a {$label} number. Check the number or change the provider.",
+            ], 422);
+        }
+
+        $data['phone'] = $phone;
 
         $application = Application::where('id', $data['application_id'])
             ->where('user_id', $request->user()->id)   // ownership scope

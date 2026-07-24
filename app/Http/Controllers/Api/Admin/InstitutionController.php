@@ -50,8 +50,20 @@ class InstitutionController extends Controller
 
         $institution->update($data);
 
-        AuditLogger::log('institution.updated', $institution,
-            old: $oldSnapshot, new: $data);
+        // Log only the fields that actually changed — signal, not noise.
+        $changedNew = [];
+        $changedOld = [];
+        foreach ($data as $key => $value) {
+            if (($oldSnapshot[$key] ?? null) != $value) {
+                $changedOld[$key] = $oldSnapshot[$key] ?? null;
+                $changedNew[$key] = $value;
+            }
+        }
+
+        if (!empty($changedNew)) {
+            AuditLogger::log('institution.updated', $institution,
+                old: $changedOld, new: $changedNew);
+        }
 
         return response()->json($institution->fresh());
     }

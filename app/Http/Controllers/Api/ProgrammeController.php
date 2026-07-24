@@ -8,23 +8,23 @@ use App\Models\Programme;
 /**
  * Public read-only controller for browsing programmes.
  *
- * Anyone (including unauthenticated visitors) can list all programmes
- * and view any single programme's details. This powers the public
- * /programmes browse page and the programme detail page.
+ * Programmes belonging to suspended institutions are excluded, mirroring
+ * the institution listing. Each programme carries an `is_full` flag so the
+ * public UI can show capacity state before a student begins applying.
  */
 class ProgrammeController extends Controller
 {
     /**
      * GET /api/programmes
-     *
-     * List all programmes with their institution data nested in.
      */
     public function index()
     {
-        $programmes = Programme::with('institution')
+        $programmes = Programme::whereHas('institution', fn ($q) => $q->where('is_suspended', false))
+            ->with('institution')
             ->with('requirements')
             ->orderBy('name')
             ->get();
+
         $programmes->each(fn ($p) => $p->is_full = $p->isFull());
 
         return response()->json($programmes);
@@ -32,17 +32,17 @@ class ProgrammeController extends Controller
 
     /**
      * GET /api/programmes/{slug}
-     *
-     * Single programme detail, including institution and requirements.
      */
     public function show(string $slug)
     {
-        $programme = Programme::with('institution')
+        $programme = Programme::whereHas('institution', fn ($q) => $q->where('is_suspended', false))
+            ->with('institution')
             ->with('requirements')
             ->where('slug', $slug)
             ->firstOrFail();
 
-        $programme->is_full = $programme->isFull();    
+        $programme->is_full = $programme->isFull();
+
         return response()->json($programme);
     }
 }
